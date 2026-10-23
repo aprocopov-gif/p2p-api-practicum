@@ -1,5 +1,7 @@
 # Documentation questions — inspected only
+
 ## 1. In both documents — inspected only
+
 - The base URL is `http://localhost:8000`. API.md Basics; OpenAPI `servers`. — inspected only
 - There is no authentication. API.md Basics; OpenAPI `info.description`. — inspected only
 - Data is kept in memory and returns to the seed data on restart or `POST /admin/reset`. API.md Basics; OpenAPI `info.description`. — inspected only
@@ -29,8 +31,11 @@
 - `POST /invoices/{invoiceId}/match` compares the purchase order, the goods received, and the invoice, and an approved invoice cannot be matched again (`workflow_gate`). API.md Invoices and Business rules; OpenAPI path `/invoices/{invoiceId}/match`. — inspected only
 - The match result includes `invoice_id`, `po_id`, `status`, `matched`, `partial_receipt`, `ordered_value`, `received_value`, `invoice_total`, and `message`. API.md Invoices; OpenAPI schema `MatchResult`. — inspected only
 - `POST /invoices/{invoiceId}/approve` approves a matched invoice once (`three_way_match_gate`, `duplicate_approval`), posts a balanced ledger entry (`gl_balance`) that debits `5000 Materials Expense` and credits `2000 Accounts Payable`, and returns `vendor_exposure`. API.md Invoices and Business rules; OpenAPI path `/invoices/{invoiceId}/approve`, schemas `ApproveResult`, `GlEntry`, and `GlLine`. — inspected only
+
 ## 2. In one document only — inspected only
+
 - API.md, Basics: the port changes with `PORT=8001 npm start`. — inspected only
+- API.md, Basics: send `Content-Type: application/json` with every body. — inspected only
 - API.md, Basics: the server creates ids prefixed `vnd-`, `po-`, and `inv-`, and seed vendors keep fixed ids. — inspected only
 - API.md, Errors: 404 is also the response when the route does not exist. — inspected only
 - API.md, The purchase-to-pay flow: the business sequence is active vendor, draft purchase order, submit, receive, invoice, match, approve, then vendor exposure. — inspected only
@@ -54,9 +59,14 @@
 - OpenAPI, path `/vendors`: the 201 body is a `Vendor` with required `id`, `name`, and `active`. — inspected only
 - OpenAPI, schema `MatchResult`: the documented 200 body allows only `status` `matched` and `matched` true. — inspected only
 - OpenAPI, schemas `PoLineCreate`, `ReceiveRequest`, and `InvoiceLine`: `quantity` and `unit_price` are JSON numbers. — inspected only
+- OpenAPI, paths `POST /vendors`, `POST /purchase-orders`, `POST /purchase-orders/{poId}/receive`, and `POST /invoices`: `requestBody` is not marked `required`. — inspected only
+
 ## 3. Conflicts — inspected only
+
 None found — inspected only
+
 ## 4. Not documented — inspected only
+
 - May a quantity be a decimal, such as 0.5 or 1.25, on a purchase order, a delivery, and an invoice? assumed until answered — inspected only
 - When a `unit_price` or a computed total has more than two decimal places, is that value rejected or rounded, and what rounding mode is used? assumed until answered — inspected only
 - What maximum length applies to a vendor name, an invoice number, a SKU, and a line description, and is a name made only of spaces rejected? assumed until answered — inspected only
@@ -69,7 +79,7 @@ None found — inspected only
 - Which amount is posted on the ledger lines, and may the entry contain more than one debit or one credit? assumed until answered — inspected only
 - What does `GET /vendors/{vendorId}/exposure` return for a vendor with no approved invoices? assumed until answered — inspected only
 - When would `partial_receipt_flag`, `gl_balance`, or `vendor_exposure_math` appear in `rule` on a 400? assumed until answered — inspected only
-- Are unknown JSON properties rejected or ignored, and what is returned when a required body is sent without `Content-Type: application/json`? assumed until answered — inspected only
+- Are unknown JSON properties or unknown query parameters rejected or ignored, and what is returned when a required body is sent without `Content-Type: application/json`? assumed until answered — inspected only
 - What is the exact id pattern after the `vnd-`, `po-`, and `inv-` prefix? assumed until answered — inspected only
 - If one receive body repeats a SKU, are those quantities added together or rejected? assumed until answered — inspected only
 - Does invoice-number comparison ignore only surrounding spaces, or also spaces inside the number? assumed until answered — inspected only
