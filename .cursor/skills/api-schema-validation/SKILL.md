@@ -6,18 +6,19 @@ paths: "tests/**"
 
 # API schema validation
 
-Use `expectSchema` from `tests/api/helpers/schema.ts`.
+Import `expectSchema` from `tests/api/helpers/schema.ts`.
 
-It loads `GET /openapi.json` once per worker through Playwright's `request` and adds it to Ajv: `new Ajv({ strict: false, allErrors: true })`, `addSchema(doc, 'openapi')`. Strict mode is off because OpenAPI adds keywords such as `example` that aren't JSON Schema.
+## Helper (`tests/api/helpers/schema.ts`)
 
-`export async function expectSchema(request, body, name)` looks up `openapi#/components/schemas/<name>`. It fails clearly if that schema doesn't exist, and fails listing Ajv's errors (path and message) if the body doesn't match. No `any` type.
+- Loads `GET /openapi.json` once per worker through Playwright's `request` and adds it to Ajv: `new Ajv({ strict: false, allErrors: true })`, `addSchema(doc, 'openapi')`. Strict mode is off because OpenAPI adds keywords such as `example` that aren't JSON Schema.
+- `export async function expectSchema(request, body, name)`: looks up `openapi#/components/schemas/<name>`; fails clearly if that schema doesn't exist; fails listing Ajv's errors (path and message) if the body doesn't match. No `any` type.
+
+When the response schema is an array, the `$ref` is on `items`. Call `expectSchema` once per element with that component name.
 
 ```typescript
 const body: unknown = await response.json();
 await expectSchema(request, body, 'Error');
 ```
-
-When the response schema is an array, the `$ref` is on `items`. Call `expectSchema` once per element with that component name.
 
 ## Steps
 
@@ -25,3 +26,7 @@ When the response schema is an array, the `$ref` is on `items`. Call `expectSche
 2. Call expectSchema on every response body, success and error.
 3. A schema check proves the shape, not the business: still assert the values that matter (status, rule, amounts, flags).
 4. When a check fails, show the Ajv errors and ask the human whether the API or the docs are wrong. Never edit the schema or loosen the check to make it pass.
+
+## Proof tests
+
+`tests/api/schema.spec.ts` — each test uses `{ tag: '@api' }`: every vendor from `GET /vendors` matches `Vendor`; a vendor without `active` fails the check (`expect(...).rejects.toThrow()`); an unknown schema name fails too. Run `npm run test:api`.
