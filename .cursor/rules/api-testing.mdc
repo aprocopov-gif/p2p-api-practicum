@@ -8,37 +8,40 @@ alwaysApply: false
 
 ## 1. Oracle
 
-`docs/API.md` and `/openapi.json` define correct behavior. If the running API differs, keep the documented expectation and let the test fail — report the defect; never weaken or rewrite the assertion to match the API. Behavior neither document covers belongs in `docs/QUESTIONS.md` as assumed until a human answers; do not assert it yet.
+`docs/API.md` and `/openapi.json` say what is right. When the API disagrees, the test keeps the documented expectation and fails — never change the expectation to match the API; report it. What neither document says is in `docs/QUESTIONS.md` as assumed: don't assert it until a human answers.
 
 ```typescript
-// ✅ GOOD — docs say inactive vendor → 400 inactive_vendor_gate
-const res = await request.post('/purchase-orders', { data: { vendor_id: 'vnd-002', line_items: [...] } });
+// ✅ GOOD — API.md rule 1: vnd-002 → 400 inactive_vendor_gate
+const res = await request.post('/purchase-orders', {
+  data: { vendor_id: 'vnd-002', line_items: [{ sku: 'LUM-2X4-8', quantity: 1, unit_price: 4.75 }] },
+});
 expect(res.status()).toBe(400);
 expect((await res.json()).rule).toBe('inactive_vendor_gate');
 
-// ❌ BAD — API returned 201, so the test “passes” with wrong expectations
+// ❌ BAD — API returned 201, so the test was “fixed” to pass
 expect([201, 400]).toContain(res.status());
 ```
 
 ## 2. Black box
 
-Tests call HTTP only. Never import, read, or change anything under `src/`.
+Never read or change `src/`. Tests exercise the API over HTTP only.
 
 ```typescript
 // ✅ GOOD
-const res = await request.get('/vendors');
+const res = await request.get('/purchase-orders/po-does-not-exist');
 
 // ❌ BAD
-import { store } from '../../src/store';
+import { purchaseOrders } from '../../src/store';
 ```
 
 ## 3. Requests
 
-Use Playwright’s `request` fixture with path-only URLs; host and port come from `baseURL` in `playwright.config.ts` (`API_BASE_URL`).
+Use Playwright's `request` fixture with paths only; the host comes from `baseURL`. Never a hard-coded URL.
 
 ```typescript
 // ✅ GOOD
-await request.get('/health');
+await request.get('/vendors');
+await request.post('/invoices', { data: { po_id, invoice_number, line_items } });
 
 // ❌ BAD
 await request.get('http://localhost:8000/vendors');
@@ -46,78 +49,93 @@ await request.get('http://localhost:8000/vendors');
 
 ## 4. Data
 
-Each test creates what it needs: own vendor for exposure checks, unique `invoice_number` values (e.g. `` `INV-${Date.now()}` ``). Never call `POST /admin/reset` inside a test — only `tests/api/reset.setup.ts` does that before the run. Do not rely on another test’s records except steps in one serial `@e2e` flow.
+Every test creates what it needs — its own vendor when it checks exposure, unique invoice numbers with `Date.now()`. Never call `POST /admin/reset` in a test. Never depend on another test's data, except inside one serial flow.
 
 ```typescript
 // ✅ GOOD
-const vendor = await request.post('/vendors', { data: { name: `QA ${Date.now()}` } });
+const create = await request.post('/vendors', { data: { name: `Exposure QA ${Date.now()}` } });
 const invoiceNumber = `INV-${Date.now()}`;
 
-// ❌ BAD — assumes seed PO from a prior test file
-await request.post('/invoices', { data: { po_id: 'po-from-other-spec', ... } });
+// ❌ BAD
+await request.post('/admin/reset');
+await request.get('/vendors/vnd-001/exposure'); // assumes prior test approved an invoice for vnd-001
 ```
 
 ## 5. Per endpoint
 
-Cover each endpoint with three cases: **positive** (happy path), **negative** (one invalid input or one rule violation at a time → 400 with `validation_error` or the named rule), **error** (unknown id → 404).
+For each endpoint: **positive** (it works), **negative** (one invalid input, one change at a time → 400 `validation_error` or the business rule), **errors** (unknown id → 404).
 
 ```typescript
-// ✅ GOOD — POST /vendors: 201, empty name → 400 validation_error, GET exposure unknown → 404
+// ✅ GOOD — GET /vendors/{vendorId}/exposure: 200 after approve flow, vnd-002 inactive N/A for exposure math, vnd-missing → 404
+test('EXP-GET-E01 unknown vendor returns 404', { tag: '@api' }, async ({ request }) => {
+  expect((await request.get('/vendors/vnd-no-such/exposure')).status()).toBe(404);
+});
 
-// ❌ BAD — only GET /vendors 200, no POST negative or exposure 404
+// ❌ BAD — only GET /health 200; no POST /vendors empty name, no GET exposure 404
 ```
 
 ## 6. Assertions
 
-Assert status; on every 400 assert the exact `rule` (wrong rule = fail). Assert values that matter (`open_ap_liability`, `ordered_value`, `partial_receipt`), not merely that a key exists. Validate response shape with `expectSchema` against OpenAPI component schemas (P48).
+Assert the status; for every 400, the exact `rule`; the values that matter, not only that a field exists; the shape, with `expectSchema` (P48). A 400 with the wrong rule is a failed test.
 
 ```typescript
 // ✅ GOOD
-expect(body.rule).toBe('receive_quantity_limit');
+const receive = await request.post(`/purchase-orders/${poId}/receive`, {
+  data: { items: [{ sku: 'LUM-2X4-8', quantity: 999 }] },
+});
+expect(receive.status()).toBe(400);
+expect((await receive.json()).rule).toBe('receive_quantity_limit');
+
+const exposure = await request.get(`/vendors/${vendorId}/exposure`);
+expect(exposure.status()).toBe(200);
+const body = await exposure.json();
 expect(body.open_ap_liability).toBe(95.1);
-await expectSchema(body, 'VendorExposure');
+await expectSchema(request, body, 'VendorExposure');
 
 // ❌ BAD
-expect(body).toHaveProperty('rule');
-expect(res.status()).toBe(400); // no rule check
+expect((await receive.json()).rule).toBe('workflow_gate'); // docs say receive_quantity_limit
+expect(body).toHaveProperty('open_ap_liability');
 ```
 
 ## 7. Tags
 
-Exactly one tag per test: `{ tag: '@api' }` for a single endpoint, `{ tag: '@e2e' }` for a multi-step flow. Put the tag on `test()`, never on `describe()`.
+Exactly one tag per test: `{ tag: '@api' }` for one endpoint, `{ tag: '@e2e' }` for a flow. On `test()`, never on `describe()`.
 
 ```typescript
 // ✅ GOOD
-test('POST /purchase-orders rejects inactive vendor', { tag: '@api' }, async ({ request }) => { ... });
+test('INV-POST-02 duplicate invoice number returns 400', { tag: '@api' }, async ({ request }) => { ... });
+test('P2P happy path draft to exposure', { tag: '@e2e' }, async ({ request }) => { ... });
 
 // ❌ BAD
-test.describe('vendors', { tag: '@api' }, () => { ... });
+test.describe('invoices', { tag: '@api' }, () => { ... });
 ```
 
 ## 8. Known bugs
 
-A test for a confirmed bug keeps full assertions and uses `test.fail(true, 'BUG-<n>: <one line>')`. Never delete the test or loosen expectations.
+A test for a confirmed bug keeps its assertions and gets `test.fail(true, 'BUG-<n>: <one line>')` — never deleted, never loosened.
 
 ```typescript
-// ✅ GOOD
-test('duplicate invoice detection is case-insensitive', { tag: '@api' }, async ({ request }) => {
-  test.fail(true, 'BUG-3: second INV-7 accepted with 201');
-  // ... full documented expectations ...
+// ✅ GOOD — docs: duplicate_invoice_detection (INV-7 = inv-7)
+test('INV-POST duplicate invoice case-insensitive', { tag: '@api' }, async ({ request }) => {
+  test.fail(true, 'BUG-3: second inv-7 accepted with 201');
+  expect(second.status()).toBe(400);
+  expect((await second.json()).rule).toBe('duplicate_invoice_detection');
 });
 
-// ❌ BAD — bug “fixed” in the test by expecting 201
+// ❌ BAD — bug masked in the test
 expect(second.status()).toBe(201);
 ```
 
 ## 9. Evidence
 
-Label every behavioral claim in comments, reports, or `docs/QUESTIONS.md`: **executed** (this run proved it), **inspected only** (read from docs/OpenAPI, not exercised), or **not yet tested**.
+Label every claim **executed**, **inspected only**, or **not yet tested** (comments, reports, `docs/QUESTIONS.md`).
 
 ```markdown
 <!-- ✅ GOOD -->
-- inactive_vendor_gate on vnd-002 → 400 — executed
-- Empty PO line_items rejected — not yet tested
+- POST /purchase-orders/{poId}/submit on draft → submitted — executed
+- Decimal quantities on PO lines — assumed until answered (docs/QUESTIONS.md §4) — inspected only
+- Match failure status/body — not yet tested
 
 <!-- ❌ BAD -->
-- All 11 rules are covered (no label, no proof)
+- All workflow_gate paths covered (no label)
 ```
