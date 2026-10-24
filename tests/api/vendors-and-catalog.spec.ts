@@ -152,6 +152,20 @@ test('VND-POST-04 POST /vendors then GET /vendors includes created vendor', { ta
   expect(inList).toEqual({ id: created.id, name, active: true });
 });
 
+test('VND-POST-05 POST /vendors accepts one-character name', { tag: '@api' }, async ({ request }) => {
+  const response = await request.post('/vendors', { data: { name: 'A' } });
+  expect(response.status()).toBe(201);
+  const body: unknown = await response.json();
+  await expectSchema(request, body, 'Vendor');
+  if (!isRecord(body)) {
+    throw new Error('201 body was not an object');
+  }
+  expect(body.name).toBe('A');
+  expect(body.active).toBe(true);
+  expect(typeof body.id).toBe('string');
+  expect((body.id as string).startsWith('vnd-')).toBe(true);
+});
+
 test('VND-POST-N01 POST /vendors rejects empty body', { tag: '@api' }, async ({ request }) => {
   const response = await request.post('/vendors', { data: {} });
   expect(response.status()).toBe(400);
