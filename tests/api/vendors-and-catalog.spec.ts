@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectSchema } from './helpers/schema';
+import { expectApiError } from './helpers/workflow';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -35,6 +36,9 @@ test('VND-GET-01 GET /vendors returns seed vendors', { tag: '@api' }, async ({ r
   const quarry = findVendorById(body, 'vnd-002');
   expect(maple).toEqual({ id: 'vnd-001', name: 'Maple Ridge Supply', active: true });
   expect(quarry).toEqual({ id: 'vnd-002', name: 'Old Quarry Materials', active: false });
+  for (const vendor of body) {
+    await expectSchema(request, vendor, 'Vendor');
+  }
 });
 
 test('VND-GET-02 GET /vendors every item matches Vendor schema', { tag: '@api' }, async ({ request }) => {
@@ -223,6 +227,11 @@ test('VND-POST-N05 POST /vendors rejects null name', { tag: '@api' }, async ({ r
     throw new Error('400 body was not an object');
   }
   expect(body.rule).toBe('validation_error');
+});
+
+test('VND-POST-N06 POST /vendors rejects whitespace-only name', { tag: '@api' }, async ({ request }) => {
+  const response = await request.post('/vendors', { data: { name: '   ' } });
+  await expectApiError(request, response, 400, 'validation_error');
 });
 
 test('VND-POST-E01 POST unknown vendors subpath returns 404', { tag: '@api' }, async ({ request }) => {

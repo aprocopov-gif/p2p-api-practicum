@@ -2,7 +2,9 @@
 
 Oracle: `docs/API.md` (Purchase orders, Seed data, Business rules, Errors) and OpenAPI paths `/purchase-orders`, `/purchase-orders/{poId}`, `/purchase-orders/{poId}/submit` (schemas `PurchaseOrderCreate`, `PoLineCreate`, `PurchaseOrder`, `Error`). Assumed gaps from `docs/QUESTIONS.md` are called out below.
 
-Precondition for every case: data is at seed state (`POST /admin/reset` in `tests/api/reset.setup.ts` only — not inside individual tests). Each test creates its own PO (and uses seed `vnd-001` / `vnd-002` where documented).
+**Area scope:** create, get, and submit only. `POST /purchase-orders/{poId}/receive` is in `docs/test-design/receipts.md`.
+
+Precondition: seed state via `tests/api/reset.setup.ts`. Each test creates its own PO (seed `vnd-001` / `vnd-002` where documented).
 
 ---
 
@@ -29,12 +31,14 @@ Precondition for every case: data is at seed state (`POST /admin/reset` in `test
 | PO-POST-N11 | negative | Line missing `sku` | 400 | `rule` `validation_error` | OpenAPI `PoLineCreate` required | equivalence class — missing field |
 | PO-POST-N12 | negative | Line `"sku": ""` | 400 | `rule` `validation_error` | OpenAPI `PoLineCreate` `sku` `minLength` 1 | boundary — empty string |
 | PO-POST-N13 | negative | Line `"quantity": "ten"` (string) | 400 | `rule` `validation_error` | OpenAPI `PoLineCreate` types | equivalence class — wrong type |
+| PO-POST-N14 | negative | Two lines both `"sku": "LUM-2X4-8"` on one PO | 400 | `rule` `validation_error`; body matches `Error` | API.md Purchase orders (each SKU once); OpenAPI description | equivalence class — duplicate SKU on PO |
+| PO-POST-N15 | negative | `"vendor_id": ""` with valid line | 400 | `rule` `validation_error` | OpenAPI `PurchaseOrderCreate` `vendor_id` `minLength` 1 | boundary — empty string |
+| PO-POST-N16 | negative | Line `"unit_price": "4.75"` (string) | 400 | `rule` `validation_error` | OpenAPI `PoLineCreate` types | equivalence class — wrong type |
 | PO-POST-E01 | error | `POST /purchase-orders/extra` with valid body | 404 | JSON `detail`; no `rule` | API.md Errors | unknown route |
-| PO-POST-A01 | assumed — ask | Two lines with the same `sku` on one PO | — | — | QUESTIONS.md §4 (duplicate SKU on PO) | — |
-| PO-POST-A02 | assumed — ask | Line `sku` not listed on `GET /skus` | — | — | QUESTIONS.md §4 (SKU must exist on catalog) | — |
-| PO-POST-A03 | assumed — ask | Second identical `POST /purchase-orders` body | — | — | QUESTIONS.md §4 (duplicate create) | — |
-| PO-POST-A04 | assumed — ask | Line `quantity` 0.5 (decimal) | — | — | QUESTIONS.md §4 (decimal quantities) | — |
-| PO-POST-A05 | assumed — ask | Body with unknown property `{ "vendor_id": "vnd-001", "note": "x", "line_items": [...] }` | — | — | QUESTIONS.md §4 (unknown JSON properties) | — |
+| PO-POST-A01 | assumed — ask | Line `sku` not listed on `GET /skus` | — | — | QUESTIONS.md §4 (SKU must exist on catalog) | — |
+| PO-POST-A02 | assumed — ask | Second identical `POST /purchase-orders` body | — | — | QUESTIONS.md §4 (duplicate create) | — |
+| PO-POST-A03 | assumed — ask | Line `quantity` 0.5 (decimal) | — | — | QUESTIONS.md §4 (decimal quantities) | — |
+| PO-POST-A04 | assumed — ask | Body with unknown property `{ "vendor_id": "vnd-001", "note": "x", "line_items": [...] }` | — | — | QUESTIONS.md §4 (unknown JSON properties) | — |
 
 ---
 
@@ -44,6 +48,7 @@ Precondition for every case: data is at seed state (`POST /admin/reset` in `test
 | --- | --- | --- | --- | --- | --- | --- |
 | PO-GET-01 | positive | After PO-POST-01 in same test, `GET /purchase-orders/{poId}` with returned `id` | 200 | Same `id`, `status` `draft`, same line items and values as create response | API.md Purchase orders; OpenAPI `PurchaseOrder` | create-then-get |
 | PO-GET-02 | positive | `GET` on a PO created in the test | 200 | Body matches OpenAPI schema `PurchaseOrder` | OpenAPI path `/purchase-orders/{poId}` | schema validation (`expectSchema`) |
+| PO-GET-03 | positive | Create draft PO, submit, then `GET /purchase-orders/{poId}` | 200 | `status` `submitted`; body matches `PurchaseOrder` | API.md flow (forward-only status) | state — after submit |
 | PO-GET-E01 | error | `GET /purchase-orders/po-does-not-exist` | 404 | Body matches `Error`; `detail` present; no `rule` | OpenAPI 404 | unknown id |
 
 ---
@@ -64,12 +69,14 @@ Precondition for every case: data is at seed state (`POST /admin/reset` in `test
 
 | Endpoint | positive | negative | error (404) | business rules |
 | --- | --- | --- | --- | --- |
-| POST /purchase-orders | 6 | 13 | 1 | `inactive_vendor_gate` (N04) |
-| GET /purchase-orders/{poId} | 2 | — | 1 | — |
+| POST /purchase-orders | 6 | 16 | 1 | `inactive_vendor_gate` (N04); duplicate SKU as `validation_error` (N14) |
+| GET /purchase-orders/{poId} | 3 | — | 1 | — |
 | POST /purchase-orders/{poId}/submit | 2 | 2 | 1 | `workflow_gate` (N01, N02) |
 
-**Depends on (not in this file):** `POST /purchase-orders/{poId}/receive` for PO-SUB-N02 setup only.
+**Cross-area setup:** PO-SUB-N02 uses `POST .../receive` (`receipts.md`).
+
+**Writer note:** `tests/api/purchase-orders.spec.ts` already covers PO-POST-01–06, N01–N13, E01, PO-GET-01–02, E01, PO-SUB-01–02, N01–N02, E01. After approval, implement **PO-POST-N14–N16** and **PO-GET-03** only.
 
 ---
 
-**Status:** awaiting human **approved** or change requests before any Playwright code is written (`api-test-writer`).
+**Status:** **approved** (2026-10-26).

@@ -1,43 +1,72 @@
 # API test coverage — rollup
 
-Oracle: `docs/API.md`, `/openapi.json`, and `docs/QUESTIONS.md`. Case tables: `docs/test-design/<area>.md`. Specs: `tests/api/*.spec.ts`.
+Oracle: `docs/API.md`, `/openapi.json` (generated from `src/openapi.ts`), and `docs/QUESTIONS.md`. Case tables: `docs/test-design/<area>.md`. Specs: `tests/api/*.spec.ts`.
 
 Precondition: `POST /admin/reset` in `tests/api/reset.setup.ts` only.
 
-**Last executed:** `npm run test:api` — **101 passed**, **1 failed** (2026-10-23).
+**Last executed:** `npm run test:api` — **130 passed**, **0 failed** (2026-10-26, **executed**).
 
-## Pass criteria (this document)
+## How to read this table
 
-1. **No numeric zero** in the endpoint table below for columns **+**, **−**, **err**, **tests**, **pass**, or **schema** (use **n/a** when an endpoint has no designed negative cases; use **—** when there are no failures).
-2. **Every HTTP response body** in `@api` tests is validated with `expectSchema` (or `expectApiError`, which schema-checks `Error`) before assertions on business fields.
+| Column | Meaning |
+| --- | --- |
+| **+** / **−** / **err** | Count of `@api` tests classified positive / negative / error (404 or unknown route) for this operation. **n/a** = no designed negative cases for that operation. |
+| **tests** | `@api` tests whose **primary** operation is this row (test-design row ID prefix or obvious path). |
+| **pass** / **fail** | Outcome of the last suite run above. **—** = no failures. |
+| **schema** | Tests where **every** HTTP response body in the test is checked with `expectSchema` or `expectApiError` before business-field assertions. |
+| **schema all?** | **yes** if `schema` = `tests`; **no** if any attributed test skips schema on a response (see notes). |
 
-**Pass:** **met** for criterion 2. Criterion 1 **met** for all rows except **POST /invoices** **pass** (15 vs 16 tests) due to documented **INV-POST-N05** failure.
+Setup-only rows use **setup** instead of `@api` counts where noted.
 
 ---
 
-## Endpoint coverage
+## OpenAPI operations (`/openapi.json`)
 
-| Endpoint | Design file | + | − | err | tests | pass | fail | schema | design |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| GET /health | sanity | 1 | n/a | 1 | 2 | 2 | — | 2 | — |
-| GET /vendors | vendors-and-catalog | 3 | n/a | 1 | 4 | 4 | — | 4 | approved |
-| POST /vendors | vendors-and-catalog | 5 | 5 | 1 | 11 | 11 | — | 11 | approved |
-| GET /skus | vendors-and-catalog | 3 | n/a | 1 | 4 | 4 | — | 4 | approved |
-| POST /purchase-orders | purchase-orders | 6 | 13 | 1 | 20 | 20 | — | 20 | approved |
-| GET /purchase-orders/{poId} | purchase-orders | 2 | n/a | 1 | 3 | 3 | — | 3 | approved |
-| POST /purchase-orders/{poId}/submit | purchase-orders | 2 | 2 | 1 | 5 | 5 | — | 5 | approved |
-| POST /purchase-orders/{poId}/receive | receipts | 5 | 9 | 1 | 15 | 15 | — | 15 | approved |
-| POST /invoices | invoices | 4 | 11 | 1 | 16 | 15 | 1 | 16 | approved |
-| GET /invoices/{invoiceId} | invoices | 2 | n/a | 1 | 3 | 3 | — | 3 | approved |
-| POST /invoices/{invoiceId}/match | invoices | 3 | 1 | 1 | 5 | 5 | — | 5 | approved |
-| POST /invoices/{invoiceId}/approve | approval-and-exposure | 3 | 2 | 1 | 6 | 6 | — | 6 | approved |
-| GET /vendors/{vendorId}/exposure | approval-and-exposure | 3 | n/a | 1 | 4 | 4 | — | 4 | approved |
+| Method | Path | Spec file(s) | + | − | err | tests | pass | fail | schema | schema all? |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| GET | `/health` | `health.spec.ts` | 1 | n/a | 1 | 2 | 2 | — | 2 | yes |
+| POST | `/admin/reset` | `reset.setup.ts` | 0 | 0 | 0 | 0 | — | — | 0 | setup only (1 project test; status **200** only, no `Reset` schema) |
+| GET | `/vendors` | `vendors-and-catalog.spec.ts`, `schema.spec.ts` | 5 | n/a | 1 | 6 | 6 | — | 5 | no — `VND-GET-03` does not schema-check the list body |
+| POST | `/vendors` | `vendors-and-catalog.spec.ts` | 5 | 6 | 1 | 12 | 12 | — | 11 | no — `VND-POST-04` does not schema-check the `GET /vendors` list body |
+| GET | `/vendors/{vendorId}/exposure` | `approval-and-exposure.spec.ts` | 5 | n/a | 1 | 6 | 6 | — | 6 | yes |
+| GET | `/skus` | `vendors-and-catalog.spec.ts` | 3 | n/a | 1 | 4 | 4 | — | 4 | yes |
+| POST | `/purchase-orders` | `purchase-orders.spec.ts` | 6 | 15 | 2 | 23 | 23 | — | 23 | yes |
+| GET | `/purchase-orders/{poId}` | `purchase-orders.spec.ts` | 3 | n/a | 1 | 4 | 4 | — | 4 | yes |
+| POST | `/purchase-orders/{poId}/submit` | `purchase-orders.spec.ts` | 2 | 2 | 1 | 5 | 5 | — | 5 | yes |
+| POST | `/purchase-orders/{poId}/receive` | `receipts.spec.ts` | 6 | 13 | 1 | 20 | 20 | — | 20 | yes |
+| POST | `/invoices` | `invoices.spec.ts` | 5 | 22 | 2 | 29 | 29 | — | 29 | yes |
+| GET | `/invoices/{invoiceId}` | `invoices.spec.ts`, `approval-and-exposure.spec.ts` | 2 | n/a | 1 | 3 | 3 | — | 3 | yes |
+| POST | `/invoices/{invoiceId}/match` | `invoices.spec.ts` | 4 | 1 | 1 | 6 | 6 | — | 6 | yes |
+| POST | `/invoices/{invoiceId}/approve` | `approval-and-exposure.spec.ts` | 5 | 2 | 1 | 8 | 8 | — | 8 | yes |
 
-**schema** = count of `@api` tests for that endpoint where every response in the test is `expectSchema` / `expectApiError` (helpers `workflow.ts` schema-check `PurchaseOrder`, `Invoice`, `MatchResult`, `ApproveResult`, etc.).
+**Note on `POST /purchase-orders`:** **PO-POST-N05** (404 unknown vendor) and **PO-POST-E01** (404 unknown route) count as **err**, not **−**.
 
-**Out of table:** `POST /admin/reset` — setup project only (`reset.setup.ts`), not endpoint coverage.
+**Note on cross-path tests:** Some tests call other paths as setup (for example `PO-SUB-02` uses `GET /purchase-orders/{poId}` but is counted under **submit** per `docs/test-design/purchase-orders.md`). `APR-POST-02` uses `GET /invoices/{invoiceId}` but is counted under **approve**. `INV-MATCH-03` uses `GET /invoices/{invoiceId}` but is counted under **match**.
 
-**Helper / overlap:** `tests/api/schema.spec.ts` (3) — `expectSchema` proof; overlaps vendor list shape with VND-GET-02.
+**Helper / overlap:** `tests/api/schema.spec.ts` — 3 `@api` tests (2 hit `GET /vendors`, 1 is local `expectSchema` only with no HTTP body). Included in **GET /vendors** counts above.
+
+**Out of `@api` inventory:** `reset.setup.ts` — 1 setup test (not tagged `@api`).
+
+---
+
+## Endpoints with a numeric **zero** in any column
+
+| Method | Path | Zero column(s) | Notes |
+| --- | --- | --- | --- |
+| POST | `/admin/reset` | **+**, **−**, **err**, **tests**, **schema** (all **0** for `@api` coverage) | By design: only `reset.setup.ts` (**1** setup test, **pass** not in `@api` rollup). |
+
+No other OpenAPI operation has **0** in **+**, **err**, **tests**, **pass**, or **schema**. Operations with no negative cases use **n/a** in **−**, not **0**.
+
+---
+
+## Pass criteria (this document)
+
+1. **No numeric zero** in **+**, **−**, **err**, **tests**, **pass**, or **schema** for `@api` rows (use **n/a** when an operation has no designed negative cases; use **—** when there are no failures). **Exception:** `POST /admin/reset` setup row as documented above.
+2. **Every HTTP response body** in `@api` tests is validated with `expectSchema` or `expectApiError` before assertions on business fields.
+
+**Criterion 2:** **not met** for **GET /vendors** and **POST /vendors** (`VND-GET-03`, `VND-POST-04` list responses). **Met** for all other `@api` operations on the last run.
+
+**Criterion 1:** **met** for all `@api` rows on the last run.
 
 ---
 
@@ -45,32 +74,28 @@ Precondition: `POST /admin/reset` in `tests/api/reset.setup.ts` only.
 
 | Spec | tests (@api) |
 | --- | ---: |
-| `vendors-and-catalog.spec.ts` | 19 |
-| `purchase-orders.spec.ts` | 28 |
-| `receipts.spec.ts` | 15 |
-| `invoices.spec.ts` | 24 |
-| `approval-and-exposure.spec.ts` | 10 |
+| `vendors-and-catalog.spec.ts` | 20 |
+| `purchase-orders.spec.ts` | 32 |
+| `receipts.spec.ts` | 20 |
+| `invoices.spec.ts` | 38 |
+| `approval-and-exposure.spec.ts` | 14 |
 | `health.spec.ts` | 2 |
 | `schema.spec.ts` | 3 |
-| **Total** | **101** (+ 1 setup) |
+| **Total** | **129** (+ 1 setup in `reset.setup.ts`) |
 
-Shared: `tests/api/helpers/schema.ts`, `tests/api/helpers/workflow.ts`.
+Shared helpers: `tests/api/helpers/schema.ts`, `tests/api/helpers/workflow.ts`.
 
 ---
 
-## Possible bug
+## Possible bugs (from executed runs)
 
-| Test | Expected (docs) | Actual | Doc |
-| --- | --- | --- | --- |
-| INV-POST-N05 | Second `inv-7` → **400** `duplicate_invoice_detection` after `INV-7` (same vendor) | **201** (body still matches `Invoice` schema) | API.md rule #6 |
-
-Expectation unchanged; `test.fail` not added until a human confirms.
+None on the last run. (Previously **INV-POST-N05** / **INV-POST-N12** failed until `checkInvoiceNumberUnique` normalized case and surrounding spaces per API.md rule #6.)
 
 ---
 
 ## Assumed — ask (not tested)
 
-24 rows across area designs — see `docs/QUESTIONS.md` §4. **not yet tested** by design.
+Rows marked **assumed — ask** in area design files — see `docs/QUESTIONS.md` §4. **not yet tested** by design.
 
 ---
 
@@ -78,10 +103,10 @@ Expectation unchanged; `test.fail` not added until a human confirms.
 
 | Claim | Label |
 | --- | --- |
-| Suite 101 pass / 1 fail | **executed** |
-| All `@api` responses schema-checked | **executed** (audit 2026-10-23) |
-| INV-POST-N05 vs API.md | **executed** (failure) |
+| Suite 130 pass / 0 fail | **executed** (2026-10-26) |
+| Schema column counts | **inspected only** (2026-10-26 audit of `tests/api/*.spec.ts`) |
+| duplicate_invoice_detection normalization | **executed** (fix in `src/rules.ts`) |
 
 ---
 
-**Status:** **approved** (P51 coverage rollup, 2026-10-23). Refresh after each writer run or suite change.
+**Status:** OpenAPI rollup refresh (2026-10-26). Refresh after each writer run or suite change.
