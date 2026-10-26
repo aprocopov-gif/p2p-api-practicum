@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectSchema } from './helpers/schema';
+import { expectApiError } from './helpers/workflow';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -35,6 +36,9 @@ test('VND-GET-01 GET /vendors returns seed vendors', { tag: '@api' }, async ({ r
   const quarry = findVendorById(body, 'vnd-002');
   expect(maple).toEqual({ id: 'vnd-001', name: 'Maple Ridge Supply', active: true });
   expect(quarry).toEqual({ id: 'vnd-002', name: 'Old Quarry Materials', active: false });
+  for (const vendor of body) {
+    await expectSchema(request, vendor, 'Vendor');
+  }
 });
 
 test('VND-GET-02 GET /vendors every item matches Vendor schema', { tag: '@api' }, async ({ request }) => {
@@ -152,6 +156,20 @@ test('VND-POST-04 POST /vendors then GET /vendors includes created vendor', { ta
   expect(inList).toEqual({ id: created.id, name, active: true });
 });
 
+test('VND-POST-05 POST /vendors accepts one-character name', { tag: '@api' }, async ({ request }) => {
+  const response = await request.post('/vendors', { data: { name: 'A' } });
+  expect(response.status()).toBe(201);
+  const body: unknown = await response.json();
+  await expectSchema(request, body, 'Vendor');
+  if (!isRecord(body)) {
+    throw new Error('201 body was not an object');
+  }
+  expect(body.name).toBe('A');
+  expect(body.active).toBe(true);
+  expect(typeof body.id).toBe('string');
+  expect((body.id as string).startsWith('vnd-')).toBe(true);
+});
+
 test('VND-POST-N01 POST /vendors rejects empty body', { tag: '@api' }, async ({ request }) => {
   const response = await request.post('/vendors', { data: {} });
   expect(response.status()).toBe(400);
@@ -209,6 +227,11 @@ test('VND-POST-N05 POST /vendors rejects null name', { tag: '@api' }, async ({ r
     throw new Error('400 body was not an object');
   }
   expect(body.rule).toBe('validation_error');
+});
+
+test('VND-POST-N06 POST /vendors rejects whitespace-only name', { tag: '@api' }, async ({ request }) => {
+  const response = await request.post('/vendors', { data: { name: '   ' } });
+  await expectApiError(request, response, 400, 'validation_error');
 });
 
 test('VND-POST-E01 POST unknown vendors subpath returns 404', { tag: '@api' }, async ({ request }) => {

@@ -1,8 +1,10 @@
 # Test design — vendors and catalog
 
-Oracle: `docs/API.md` (Vendors, Catalog, Seed data, Errors) and OpenAPI paths `/vendors`, `/skus` (schemas `Vendor`, `VendorCreate`, `Sku`). Assumed gaps from `docs/QUESTIONS.md` are called out below.
+Oracle: `docs/API.md` (Vendors, Catalog, Seed data, Errors) and OpenAPI paths `/vendors`, `/skus` (schemas `Vendor`, `VendorCreate`, `Sku`, `Error`). Assumed gaps from `docs/QUESTIONS.md` are called out below.
 
-Precondition for every case: data is at seed state (`POST /admin/reset` in `tests/api/reset.setup.ts` only — not inside individual tests).
+**Area scope:** `GET /vendors`, `POST /vendors`, `GET /skus` only. `GET /vendors/{vendorId}/exposure` is in `docs/test-design/approval-and-exposure.md`.
+
+Precondition: seed state via `tests/api/reset.setup.ts` only — not inside individual tests.
 
 ---
 
@@ -24,22 +26,24 @@ No business rule from API.md § Business rules applies to listing vendors; no 40
 
 | ID | type | what we send | expected status | expected body (rule, key values) | source | technique |
 | --- | --- | --- | --- | --- | --- | --- |
-| VND-POST-01 | positive | `POST /vendors` body `{ "name": "<unique non-empty string>" }` | 201 | `Vendor`: `name` equals sent name; `active` true; `id` present and starts with `vnd-` | API.md Vendors, Basics; OpenAPI `VendorCreate` / `Vendor` | happy path |
+| VND-POST-01 | positive | `POST /vendors` body `{ "name": "<unique non-empty string>" }` | 201 | Body matches OpenAPI `Vendor`: `name` equals sent name; `active` true; `id` present and starts with `vnd-` | API.md Vendors, Basics; OpenAPI `VendorCreate` / `Vendor` | happy path |
 | VND-POST-02 | positive | `POST /vendors` body `{ "name": "<unique>", "active": false }` | 201 | `active` false; other fields as in VND-POST-01 | API.md Vendors (`active` optional); OpenAPI `VendorCreate` | documented option |
-| VND-POST-03 | positive | `POST /vendors` body `{ "name": "<unique>", "active": true }` | 201 | Same as VND-POST-01 (`active` true) | API.md Vendors (default `active` true) | default equivalence |
+| VND-POST-03 | positive | `POST /vendors` body `{ "name": "<unique>", "active": true }` | 201 | Same as VND-POST-01 (`active` true) | API.md Vendors (default `active` true); OpenAPI `VendorCreate` `active` default | default equivalence |
 | VND-POST-04 | positive | After VND-POST-01, `GET /vendors` | 200 | Created vendor appears in list with same `id` and `name` | API.md Vendors | create-then-list |
-| VND-POST-N01 | negative | `POST /vendors` body `{}` | 400 | `rule` `validation_error`; non-empty `detail` | OpenAPI `/vendors` 400; API.md Errors | equivalence class — missing required field |
-| VND-POST-N02 | negative | `POST /vendors` body `{ "name": "" }` | 400 | `rule` `validation_error` | API.md Vendors (name cannot be empty); OpenAPI `VendorCreate` | boundary — empty string |
-| VND-POST-N03 | negative | `POST /vendors` body `{ "name": 12345 }` | 400 | `rule` `validation_error` | OpenAPI `VendorCreate` (`name` string) | equivalence class — wrong type |
-| VND-POST-N04 | negative | `POST /vendors` body `{ "name": "Valid Name", "active": "yes" }` | 400 | `rule` `validation_error` | OpenAPI `VendorCreate` (`active` boolean) | equivalence class — wrong type |
-| VND-POST-N05 | negative | `POST /vendors` body `{ "name": null }` | 400 | `rule` `validation_error` | OpenAPI `VendorCreate` | equivalence class — null |
-| VND-POST-E01 | error | `POST /vendors/extra` (path does not exist) | 404 | JSON `detail`; no `rule` | API.md Errors | unknown route |
-| VND-POST-A01 | assumed — ask | `POST /vendors` body `{ "name": "   " }` (only spaces) | — | — | QUESTIONS.md §4 (spaces-only name) | — |
-| VND-POST-A02 | assumed — ask | Second `POST /vendors` with the same `name` as an existing vendor | — | — | QUESTIONS.md §4 (duplicate create) | — |
-| VND-POST-A03 | assumed — ask | `POST /vendors` with body but without `Content-Type: application/json` | — | — | QUESTIONS.md §4 (Content-Type) | — |
-| VND-POST-A04 | assumed — ask | `POST /vendors` body `{ "name": "<very long string>" }` beyond any documented max | — | — | QUESTIONS.md §4 (max length) | — |
+| VND-POST-05 | positive | `POST /vendors` body `{ "name": "A" }` — the only case that uses this one-character name, against seed data where no vendor is named `A` | 201 | `name` is `A`; `active` true; `id` starts with `vnd-` | OpenAPI `VendorCreate` (`name` `minLength` 1) | boundary — smallest valid |
+| VND-POST-N01 | negative | `POST /vendors` body `{}` | 400 | Body matches OpenAPI `Error`; `rule` `validation_error`; non-empty `detail` | OpenAPI `/vendors` 400, schema `Error`; API.md Errors | equivalence class — missing required field |
+| VND-POST-N02 | negative | `POST /vendors` body `{ "name": "" }` | 400 | `rule` `validation_error`; body matches `Error` | API.md Vendors (name cannot be empty); OpenAPI `VendorCreate` `minLength` 1 | boundary — one under the minimum (length 0) |
+| VND-POST-N03 | negative | `POST /vendors` body `{ "name": 12345 }` | 400 | `rule` `validation_error`; body matches `Error` | OpenAPI `VendorCreate` (`name` string) | equivalence class — wrong type |
+| VND-POST-N04 | negative | `POST /vendors` body `{ "name": "Valid Name", "active": "yes" }` | 400 | `rule` `validation_error`; body matches `Error` | OpenAPI `VendorCreate` (`active` boolean) | equivalence class — wrong type |
+| VND-POST-N05 | negative | `POST /vendors` body `{ "name": null }` | 400 | `rule` `validation_error`; body matches `Error` | OpenAPI `VendorCreate` | equivalence class — null |
+| VND-POST-N06 | negative | `POST /vendors` body `{ "name": "   " }` (only spaces) | 400 | `rule` `validation_error`; body matches `Error` | API.md Vendors (name cannot be empty); OpenAPI `VendorCreate` (`name` trimmed before `minLength`) | boundary — whitespace-only name |
+| VND-POST-E01 | error | `POST /vendors/extra` (path does not exist) | 404 | JSON `detail`; no `rule` | API.md Errors (404 when the route does not exist) | unknown route |
+| VND-POST-A01 | assumed — ask | Second `POST /vendors` with the same `name` as an existing vendor | — | — | QUESTIONS.md §4 (duplicate create) | — |
+| VND-POST-A02 | assumed — ask | `POST /vendors` with body but without `Content-Type: application/json` | — | — | QUESTIONS.md §4 (Content-Type) | — |
+| VND-POST-A03 | assumed — ask | `POST /vendors` body `{ "name": "<very long string>" }` beyond any documented max | — | — | QUESTIONS.md §4 (max length) | — |
+| VND-POST-A04 | assumed — ask | `POST /vendors` body `{ "name": "<unique>", "extra": true }` | — | — | QUESTIONS.md §4 (unknown JSON properties) | — |
 
-None of the eleven named business rules in API.md are triggered by vendor creation; rejections use `validation_error` only (OpenAPI `/vendors` 400).
+Rejections on this path use `validation_error` only. No vendor id on create, so 404 is unknown route (E01), not unknown id.
 
 ---
 
@@ -53,7 +57,7 @@ None of the eleven named business rules in API.md are triggered by vendor creati
 | SKU-GET-E01 | error | `GET /skus/extra` (path does not exist) | 404 | JSON `detail`; no `rule` | API.md Errors | unknown route |
 | SKU-GET-A01 | assumed — ask | `GET /skus?unknown=query` | — | — | QUESTIONS.md §4 (unknown query params not documented) | — |
 
-Catalog is read-only in the API; no 400 or business-rule rows apply to `GET /skus`.
+Catalog is read-only; no 400 or business-rule rows for `GET /skus`.
 
 ---
 
@@ -62,13 +66,13 @@ Catalog is read-only in the API; no 400 or business-rule rows apply to `GET /sku
 | Endpoint | positive | negative | error (404) | business rules |
 | --- | --- | --- | --- | --- |
 | GET /vendors | 3 | — | 1 | — |
-| POST /vendors | 4 | 5 | 1 | — (validation only) |
+| POST /vendors | 5 | 6 | 1 | — (validation only) |
 | GET /skus | 3 | — | 1 | — |
 
-**Out of scope for this area file** (separate design): `GET /vendors/{vendorId}/exposure`.
+**Overlap:** `tests/api/schema.spec.ts` exercises `Vendor` schema separately from VND-GET-02.
 
-**Existing tests:** `tests/api/schema.spec.ts` partially overlaps VND-GET-02 (Vendor schema on list). Implementing this design may extend or split that file when approved.
+**Writer note:** `tests/api/vendors-and-catalog.spec.ts` already covers all rows except **VND-POST-N06**. Implement N06 only after approval.
 
 ---
 
-**Status:** awaiting human **approved** or change requests before any Playwright code is written (`api-test-writer`).
+**Status:** **approved** (2026-10-26).

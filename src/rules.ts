@@ -48,12 +48,20 @@ export function checkReceiveWithinOrdered(line: PoLine, incoming: number): void 
   }
 }
 
+/** Case-insensitive, surrounding-space-insensitive key for duplicate_invoice_detection (API.md rule #6). */
+export function normalizeInvoiceNumber(invoiceNumber: string): string {
+  return invoiceNumber.trim().toLowerCase();
+}
+
 export function checkInvoiceNumberUnique(invoiceNumber: string, existingNumbers: string[]): void {
-  if (existingNumbers.includes(invoiceNumber)) {
-    throw new RuleViolation(
-      'duplicate_invoice_detection',
-      `Invoice number ${invoiceNumber} already exists for this vendor.`,
-    );
+  const key = normalizeInvoiceNumber(invoiceNumber);
+  for (const existing of existingNumbers) {
+    if (normalizeInvoiceNumber(existing) === key) {
+      throw new RuleViolation(
+        'duplicate_invoice_detection',
+        `Invoice number ${invoiceNumber} already exists for this vendor.`,
+      );
+    }
   }
 }
 
