@@ -65,6 +65,7 @@ test.describe('partial receipt — two-line PO', () => {
   });
 
   test('match — partial receipt flag', { tag: '@e2e' }, async ({ request }) => {
+    test.fail(true, 'BUG-2: match partial_receipt false when second PO line is short-received');
     const result = await matchInvoice(request, invoiceId);
     expect(result.partial_receipt).toBe(true);
     expect(result.received_value).toBe(RECEIVED_VALUE);

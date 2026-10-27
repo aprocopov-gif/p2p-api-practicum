@@ -293,6 +293,27 @@ test('INV-POST-N09 POST /invoices line value over received value', { tag: '@api'
   await expectApiError(request, response, 400, 'overpayment_protection');
 });
 
+test('INV-POST-BUG-1 POST /invoices line total over received when unit_price raised', { tag: '@api' }, async ({
+  request,
+}) => {
+  test.fail(true, 'BUG-1: invoice total over received value via unit_price accepted with 201');
+  const lowPriceLine = { sku: 'LUM-2X4-8', quantity: 2, unit_price: 1.0 } as const;
+  const { id: poId } = await createPurchaseOrder(request, {
+    vendor_id: 'vnd-001',
+    line_items: [lowPriceLine],
+  });
+  await submitPurchaseOrder(request, poId);
+  await receiveOnPo(request, poId, [{ sku: lowPriceLine.sku, quantity: 2 }]);
+  const response = await request.post('/invoices', {
+    data: {
+      po_id: poId,
+      invoice_number: `INV-BUG1-${Date.now()}`,
+      line_items: [{ sku: lowPriceLine.sku, quantity: 2, unit_price: 1.01 }],
+    },
+  });
+  await expectApiError(request, response, 400, 'overpayment_protection');
+});
+
 test('INV-POST-N10 POST /invoices empty invoice_number returns validation_error', { tag: '@api' }, async ({
   request,
 }) => {
