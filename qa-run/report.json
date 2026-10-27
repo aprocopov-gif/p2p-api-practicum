@@ -1,0 +1,440 @@
+{
+  "happy_path": {
+    "status": "PASS",
+    "steps": [
+      {
+        "step": 1,
+        "method": "GET",
+        "path": "/health",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 2,
+        "method": "GET",
+        "path": "/openapi.json",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 3,
+        "method": "GET",
+        "path": "/vendors",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 4,
+        "method": "GET",
+        "path": "/skus",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 5,
+        "method": "POST",
+        "path": "/vendors",
+        "status": 201,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 6,
+        "method": "POST",
+        "path": "/purchase-orders",
+        "status": 201,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 7,
+        "method": "POST",
+        "path": "/purchase-orders/po-dbb4badd/submit",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 8,
+        "method": "POST",
+        "path": "/purchase-orders/po-dbb4badd/receive",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 9,
+        "method": "POST",
+        "path": "/invoices",
+        "status": 201,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 10,
+        "method": "POST",
+        "path": "/invoices/inv-98290e3f/match",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 11,
+        "method": "POST",
+        "path": "/invoices/inv-98290e3f/approve",
+        "status": 200,
+        "verdict": "as-documented"
+      },
+      {
+        "step": 12,
+        "method": "GET",
+        "path": "/vendors/vnd-a3c31d12/exposure",
+        "status": 200,
+        "verdict": "as-documented"
+      }
+    ]
+  },
+  "adversarial": [
+    {
+      "rule": "inactive_vendor_gate",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/purchase-orders",
+          "body": {
+            "vendor_id": "vnd-002",
+            "line_items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 1,
+                "unit_price": 4.75
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "Vendor vnd-002 is inactive. Purchase orders need an active vendor.",
+            "rule": "inactive_vendor_gate"
+          }
+        },
+        "expected": "400 with rule inactive_vendor_gate (API.md Business rules #1)",
+        "reason": "Seed inactive vendor; status=400, rule=inactive_vendor_gate"
+      }
+    },
+    {
+      "rule": "receive_quantity_limit",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/purchase-orders/po-82eee461/receive",
+          "body": {
+            "items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 6
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "Cannot receive 6 of LUM-2X4-8: ordered 5, already received 0.",
+            "rule": "receive_quantity_limit"
+          }
+        },
+        "expected": "400 with rule receive_quantity_limit (API.md Business rules #2)",
+        "reason": "Attempted receive 6 when ordered 5; status=400, rule=receive_quantity_limit"
+      }
+    },
+    {
+      "rule": "overpayment_protection",
+      "status": "BREACHED",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices",
+          "body": {
+            "po_id": "po-60e43cf8",
+            "invoice_number": "INV-3b-cent",
+            "line_items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 2,
+                "unit_price": 1.01
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "inv-c6d943f1",
+            "po_id": "po-60e43cf8",
+            "vendor_id": "vnd-7c22f874",
+            "invoice_number": "INV-3b-cent",
+            "status": "received",
+            "line_items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 2,
+                "unit_price": 1.01
+              }
+            ],
+            "total_amount": 2.02,
+            "matched": false,
+            "partial_receipt": null
+          }
+        },
+        "expected": "400 with rule overpayment_protection (API.md Business rules #3)",
+        "reason": "Received value 2.00 invoice 2.02; status=201, rule=None"
+      }
+    },
+    {
+      "rule": "three_way_match_gate",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices/inv-59c63f9f/approve",
+          "body": null
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "Invoice inv-59c63f9f must pass the 3-way match before approval.",
+            "rule": "three_way_match_gate"
+          }
+        },
+        "expected": "400 with rule three_way_match_gate (API.md Business rules #4)",
+        "reason": "status=400, rule=three_way_match_gate"
+      }
+    },
+    {
+      "rule": "partial_receipt_flag",
+      "status": "BREACHED",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices/inv-6a0cf014/match",
+          "body": null
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "invoice_id": "inv-6a0cf014",
+            "po_id": "po-968fef74",
+            "status": "matched",
+            "matched": true,
+            "partial_receipt": false,
+            "ordered_value": 95.1,
+            "received_value": 71.3,
+            "invoice_total": 71.3,
+            "message": "3-way match passed."
+          }
+        },
+        "expected": "200 match with partial_receipt true (API.md Business rules #5)",
+        "reason": "partial_receipt=False, status=200"
+      }
+    },
+    {
+      "rule": "duplicate_invoice_detection",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices",
+          "body": {
+            "po_id": "po-1692576b",
+            "invoice_number": "inv-6a-1793064649604641000",
+            "line_items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 1,
+                "unit_price": 4.75
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "Invoice number inv-6a-1793064649604641000 already exists for this vendor.",
+            "rule": "duplicate_invoice_detection"
+          }
+        },
+        "expected": "400 with rule duplicate_invoice_detection (API.md #6)",
+        "reason": "status=400, rule=duplicate_invoice_detection"
+      }
+    },
+    {
+      "rule": "gl_balance",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices/inv-d3329e10/approve",
+          "body": null
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "invoice_id": "inv-d3329e10",
+            "status": "approved",
+            "gl_entry": {
+              "debits": [
+                {
+                  "account": "5000 Materials Expense",
+                  "amount": 14.25
+                }
+              ],
+              "credits": [
+                {
+                  "account": "2000 Accounts Payable",
+                  "amount": 14.25
+                }
+              ],
+              "balanced": true
+            },
+            "vendor_exposure": 14.25
+          }
+        },
+        "expected": "200 with gl_entry.balanced true and debits equal credits (API.md #7)",
+        "reason": "balanced=True, deb=14.25, cred=14.25"
+      }
+    },
+    {
+      "rule": "invoice_line_validation",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices",
+          "body": {
+            "po_id": "po-e8be24aa",
+            "invoice_number": "INV-8a-badsku",
+            "line_items": [
+              {
+                "sku": "REB-10MM-6",
+                "quantity": 1,
+                "unit_price": 18.25
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "SKU REB-10MM-6 is not on the purchase order.",
+            "rule": "invoice_line_validation"
+          }
+        },
+        "expected": "400 with rule invoice_line_validation (API.md #8)",
+        "reason": "status=400, rule=invoice_line_validation"
+      }
+    },
+    {
+      "rule": "duplicate_approval",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices/inv-d57ece05/approve",
+          "body": null
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "Invoice inv-d57ece05 is already approved.",
+            "rule": "duplicate_approval"
+          }
+        },
+        "expected": "400 with rule duplicate_approval (API.md #9)",
+        "reason": "status=400, rule=duplicate_approval"
+      }
+    },
+    {
+      "rule": "workflow_gate",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices",
+          "body": {
+            "po_id": "po-a6393131",
+            "invoice_number": "INV-10b-draft",
+            "line_items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 2,
+                "unit_price": 4.75
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "Purchase order po-a6393131 is still a draft. Submit it before invoicing.",
+            "rule": "workflow_gate"
+          }
+        },
+        "expected": "400 with rule workflow_gate (API.md #10)",
+        "reason": "status=400, rule=workflow_gate"
+      }
+    },
+    {
+      "rule": "vendor_exposure_math",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "GET",
+          "path": "/vendors/vnd-be1c3e9c/exposure",
+          "body": null
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "vendor_id": "vnd-be1c3e9c",
+            "open_ap_liability": 31.9,
+            "approved_invoices": [
+              "inv-97607b19",
+              "inv-4009b85d"
+            ]
+          }
+        },
+        "expected": "open_ap_liability ≈ 31.9 (API.md #11)",
+        "reason": "expected=31.9, actual=31.9, approve1=200, approve2=200"
+      }
+    },
+    {
+      "rule": "validation_error",
+      "status": "HELD",
+      "evidence": {
+        "request": {
+          "method": "POST",
+          "path": "/invoices",
+          "body": {
+            "po_id": "po-b1b95cb3",
+            "invoice_number": "INV-8c-zero",
+            "line_items": [
+              {
+                "sku": "LUM-2X4-8",
+                "quantity": 0,
+                "unit_price": 4.75
+              }
+            ]
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "detail": "line_items.0.quantity: quantity must be greater than 0",
+            "rule": "validation_error"
+          }
+        },
+        "expected": "400 with validation_error (API.md Endpoints — quantity > 0)",
+        "reason": "status=400, rule=validation_error, detail=line_items.0.quantity: quantity must be greater than 0"
+      }
+    }
+  ],
+  "summary": "Happy path: all 12 explorer steps matched the documentation (PASS). Adversarial: 10 of 12 tested rules held; 2 broke and were confirmed with curl on fresh data. overpayment_protection BREACHED: the API accepts invoices whose total exceeds received value when the overrun is via a higher unit_price (e.g. $2.02 invoiced vs $2.00 received on 2 units at $0.02 over; up to ~1% on large lines such as $101 vs $100 received)—money at risk is any excess that could be matched and approved into AP. partial_receipt_flag BREACHED: on a multi-line PO with the last line only partly received, match returned partial_receipt false despite received_value below ordered_value—risk is false confidence that delivery is complete before paying. No undocumented adversary outcomes."
+}
